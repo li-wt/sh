@@ -7,6 +7,9 @@ class AsyncMySQLManager:
     def __init__(self, concurrency=10):
         self.mysql_config = get_config().get('mysql')
         self.concurrency = concurrency
+        self.db_pool = None
+    
+    async def init_pool(self):
         self.db_pool = await aiomysql.create_pool(
             host=self.mysql_config['host'],
             port=self.mysql_config['port'],
@@ -26,28 +29,27 @@ class AsyncMySQLManager:
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cur:
                 try:
-                    await cur.execute("INSERT INTO urls (url) VALUES (%s)",
-                                      (url,))
+                    await cur.execute("INSERT INTO urls (url) VALUES (%s)", (url,))
                     await conn.commit()
                 except aiomysql.IntegrityError as e:
                     print(f"IntegrityError: {e}")
     
-    async def process_urls(self, urls):
-        semaphore = asyncio.Semaphore(self.concurrency)
-        
-        async def sem_insert_url(url):
-            async with semaphore:
-                await self.insert_url(url)
-        
-        tasks = [sem_insert_url(url) for url in urls]
-        await asyncio.gather(*tasks)
-
-
-# 使用示例
-if __name__ == '__main__':
-    async with AsyncMySQLManager() as db_manager:
-        tasks = db_manager.process_url("url")
-        # tasks = [url_processor.process_url(url) for url in urls]
-        await asyncio.gather(*tasks)
+    async def process_url(self, url):
+        await self.insert_url(url)
     
+    async def __aenter__(self):
+        await self.init_pool()
+        return self
+    
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close_pool()
 
+
+async def main():
+    url = "http://example.com/1"
+
+    async with AsyncMySQLManager() as db_manager:
+        await db_manager.process_url(url)
+
+if __name__ == '__main__':
+    asyncio.run(main())

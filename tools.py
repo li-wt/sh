@@ -4,7 +4,7 @@ from retrying import retry
 import yaml
 
 
-def get_config() -> dict:
+async def get_config() -> dict:
     with open('config.yaml', 'r') as f:
         data = yaml.safe_load(f.read())
     return data
@@ -15,11 +15,11 @@ class RedisConnectionPool:
         self.pool = redis.ConnectionPool(host=host, port=port, db=db, max_connections=max_connections)
         self.client = redis.Redis(connection_pool=self.pool)
     
-    def get_client(self):
+    async def get_client(self):
         return self.client
 
 
-def get_proxy():
+async def get_proxy():
     proxy = {
         'http': "http://127.0.0.1:7890",
         'https': "https://127.0.0.1:7890"
@@ -63,5 +63,5 @@ class RequestWithRetry:
 
 
 if __name__ == '__main__':
-    print(get_config().get('mysql'))
+    get_config().get('mysql')
     
