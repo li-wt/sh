@@ -33,11 +33,11 @@ class AsyncMySQLManager:
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cur:
                 try:
-                    await cur.executemany(sql, data)
+                    await cur.execute(sql, data)
                     await conn.commit()
                     return True
-                except aiomysql.IntegrityError:
-                    logger.info('数据已存在')
+                except aiomysql.IntegrityError as e:
+                    logger.info(f'数据已存在,{e}')
                     return False
                 except Exception as e:
                     logger.info(f'存储出错--->{e}')
@@ -50,9 +50,9 @@ class AsyncMySQLManager:
 async def main(url):
     sql_manage = AsyncMySQLManager()
     await sql_manage.init_pool()
-    result = await sql_manage.process_url(url)
+    result = await sql_manage.insert_url('insert into title(name, `title`) values (%s, %s)', data=["fsfsfs", 'ddd'])
     print(result)
 
 
 if __name__ == '__main__':
-    asyncio.run(main("ccc"))
+    asyncio.run(main(["fsfsfs", 'ddd']))

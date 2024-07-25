@@ -1,10 +1,13 @@
 import asyncio
 
-import redis
-import requests
-from retrying import retry
-import yaml
 import aiofiles
+import aiohttp
+import redis
+import yaml
+from fake_useragent import UserAgent
+from loguru import logger
+
+ua = UserAgent()
 
 
 async def get_config() -> dict:
@@ -17,44 +20,96 @@ class RedisConnectionPool:
     def __init__(self, host='localhost', port=6379, db=0, max_connections=10):
         self.pool = redis.ConnectionPool(host=host, port=port, db=db, max_connections=max_connections)
         self.client = redis.Redis(connection_pool=self.pool)
-    
+
     async def get_client(self):
         return self.client
 
 
+def get_redis_client():
+    redis_client = redis.Redis(
+        host='127.0.0.1',
+        port=6379,
+        password='123456',
+        db=11,
+    )
+    return redis_client
+
+
 async def get_proxy():
-    proxy = {
+    return {
         'http': "http://127.0.0.1:7890",
-        'https': "https://127.0.0.1:7890"
+        'https': "http://127.0.0.1:7890"
     }
-    return proxy
 
 
-class RequestWithRetry:
-    def __init__(self, retries=3, backoff_factor=1, status_forcelist=(500, 502, 504)):
-        self.retries = retries
-        self.backoff_factor = backoff_factor
-        self.status_forcelist = status_forcelist
-    
-    @retry(stop_max_attempt_number=3, wait_exponential_multiplier=1000, wait_exponential_max=10000)
-    def _send_request(self, method, url, **kwargs):
-        response = requests.request(method, url, **kwargs)
-        if response.status_code in self.status_forcelist:
-            response.raise_for_status()
-        return response
-    
-    def get(self, url, **kwargs):
-        return self._send_request('GET', url, **kwargs)
-    
-    def post(self, url, **kwargs):
-        return self._send_request('POST', url, **kwargs)
-    
-    def put(self, url, **kwargs):
-        return self._send_request('PUT', url, **kwargs)
-    
-    def delete(self, url, **kwargs):
-        return self._send_request('DELETE', url, **kwargs)
+class AsyncHttpClient:
+    def __init__(self):
+        self.session = None
 
+    async def init(self):
+        self.session = aiohttp.ClientSession()
+        logger.info("HTTP client session initialized")
+
+    async def close(self):
+        if self.session:
+            await self.session.close()
+            logger.info("HTTP client session closed")
+
+    async def get(self, url, headers=None, **kwargs) -> str:
+        try:
+            proxies = await get_proxy()
+            proxy = proxies.get('http') if url.startswith('http://') else proxies.get('https')
+            async with self.session.get(url, headers=headers, proxy=proxy, **kwargs) as response:
+                if response.status == 200:
+                    text = await response.text()
+                    return text
+                else:
+                    logger.error(f"Failed to fetch URL: {url}, Status Code: {response.status}")
+                    return None
+        except Exception as e:
+            logger.error(f"Exception during GET request to {url}: {e}")
+            return None
+
+    async def post(self, url, data=None, headers=None, **kwargs):
+        try:
+            proxies = await get_proxy()
+            proxy = proxies.get('http') if url.startswith('http://') else proxies.get('https')
+            async with self.session.post(url, data=data, headers=headers, proxy=proxy, **kwargs) as response:
+                if response.status == 200:
+                    text = await response.text()
+                    return text
+                else:
+                    text = await response.text()
+                    logger.error(f"Failed to post to URL: {url}, Status Code: {response.status}")
+                    return None
+        except Exception as e:
+            logger.error(f"Exception during POST request to {url}: {e}")
+            return None
+
+
+# 示例使用
+async def main():
+    client = AsyncHttpClient()
+    await client.init()
+
+    url = "https://www.baidu.com"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+
+    # 执行 GET 请求
+    response = await client.get(url, headers=headers)
+    print(f"GET response: {response}")
+
+    # 执行 POST 请求
+    # data = {"title": "foo", "body": "bar", "userId": 1}
+    # response = await client.post(url, data=data, headers=headers)
+    # print(f"POST response: {response}")
+
+    await client.close()
+
+
+# 运行主函数
 
 # # 使用示例
 # if __name__ == "__main__":
@@ -70,5 +125,4 @@ if __name__ == '__main__':
     # async def main():
     #     await get_config()
     # asyncio.run(main())
-
-    get_redis_client()
+    asyncio.run(main())

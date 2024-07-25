@@ -2,13 +2,13 @@ mysql:
   host: "127.0.0.1"
   port : 3306
   user: "root"
-  password: "root"
+  password: "123456"
   db: 'test'
 
 redis:
   host: '127.0.0.1'
   port: 6379
-  db: 2
+  db: '2'
   password: "123456"
 
 watch_id : "watch_id"
