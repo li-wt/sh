@@ -3,6 +3,7 @@ import aiomysql
 from tools import get_config
 from loguru import logger
 
+
 class AsyncMySQLManager:
     def __init__(self, concurrency=10):
         self.mysql_config = None
@@ -41,9 +42,8 @@ class AsyncMySQLManager:
                 except Exception as e:
                     logger.info(f'存储出错--->{e}')
                     return
-                
     
-    async def process_url(self, sql: str, data:list):
+    async def process_url(self, sql: str, data: list):
         return await self.insert_url(sql=sql, data=data)
 
 
