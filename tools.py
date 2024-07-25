@@ -1,12 +1,15 @@
+import asyncio
+
 import redis
 import requests
 from retrying import retry
 import yaml
+import aiofiles
 
 
 async def get_config() -> dict:
-    with open('config.yaml', 'r') as f:
-        data = yaml.safe_load(f.read())
+    async with aiofiles.open('config.yaml', 'r') as f:
+        data = yaml.safe_load(await f.read())
     return data
 
 
@@ -52,6 +55,7 @@ class RequestWithRetry:
     def delete(self, url, **kwargs):
         return self._send_request('DELETE', url, **kwargs)
 
+
 # # 使用示例
 # if __name__ == "__main__":
 #     requester = RequestWithRetry(retries=3, backoff_factor=2)
@@ -63,5 +67,8 @@ class RequestWithRetry:
 
 
 if __name__ == '__main__':
-    get_config().get('mysql')
-    
+    # async def main():
+    #     await get_config()
+    # asyncio.run(main())
+
+    get_redis_client()

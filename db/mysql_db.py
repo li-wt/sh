@@ -1,15 +1,18 @@
 import asyncio
 import aiomysql
 from tools import get_config
-
+from loguru import logger
 
 class AsyncMySQLManager:
     def __init__(self, concurrency=10):
-        self.mysql_config = get_config().get('mysql')
+        self.mysql_config = None
         self.concurrency = concurrency
         self.db_pool = None
     
     async def init_pool(self):
+        config = await get_config()
+        self.mysql_config = config.get('mysql')
+        print(self.mysql_config)
         self.db_pool = await aiomysql.create_pool(
             host=self.mysql_config['host'],
             port=self.mysql_config['port'],
@@ -25,31 +28,31 @@ class AsyncMySQLManager:
             self.db_pool.close()
             await self.db_pool.wait_closed()
     
-    async def insert_url(self, url):
+    async def insert_url(self, sql: str, data: list):
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cur:
                 try:
-                    await cur.execute("INSERT INTO urls (url) VALUES (%s)", (url,))
+                    await cur.executemany(sql, data)
                     await conn.commit()
-                except aiomysql.IntegrityError as e:
-                    print(f"IntegrityError: {e}")
+                    return True
+                except aiomysql.IntegrityError:
+                    logger.info('数据已存在')
+                    return False
+                except Exception as e:
+                    logger.info(f'存储出错--->{e}')
+                    return
+                
     
-    async def process_url(self, url):
-        await self.insert_url(url)
-    
-    async def __aenter__(self):
-        await self.init_pool()
-        return self
-    
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.close_pool()
+    async def process_url(self, sql: str, data:list):
+        return await self.insert_url(sql=sql, data=data)
 
 
-async def main():
-    url = "http://example.com/1"
+async def main(url):
+    sql_manage = AsyncMySQLManager()
+    await sql_manage.init_pool()
+    result = await sql_manage.process_url(url)
+    print(result)
 
-    async with AsyncMySQLManager() as db_manager:
-        await db_manager.process_url(url)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.run(main("ccc"))
