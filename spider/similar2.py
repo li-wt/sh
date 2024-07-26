@@ -2,6 +2,7 @@ import asyncio
 import json
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fake_useragent import UserAgent
 from jsonpath_ng import parse
@@ -48,9 +49,9 @@ class Similar:
             return
 
         dyz = parse("$..subscriberCountText.accessibility.accessibilityData.label").find(data)[0].value
-        dyz = re.findall('(\d.+?)位订阅者', dyz)
+        dyz = re.findall(r'(\d.+?)位订阅者', dyz)
         author_id = [item.value for item in
-                      parse('$..title.runs[*].navigationEndpoint.commandMetadata.webCommandMetadata.url').find(data)]
+                     parse('$..title.runs[*].navigationEndpoint.commandMetadata.webCommandMetadata.url').find(data)]
         if dyz and eval(dyz[0].replace('万', ' * 10000')) > 10000 and author_id:
             await self.save2('author', author_id[0])
             logger.info(f"author{author_id[0]} 已存储")
@@ -150,7 +151,7 @@ class Similar:
         re_try = 0
         while re_try < 3:
             try:
-                await self.redis_db.lpush('watch_id', watch_id)
+                await self.redis_db.lpush(self.watch_id_set, watch_id)
                 logger.error(f'回填成功:-----> watch_id:{watch_id}')
                 return
             except Exception:
@@ -188,10 +189,30 @@ class Similar:
                 logger.info(f'开始获取watch_id:{watch_id}')
                 await self.get_watch(watch_id)
             except Exception as e:
-                await self.back_fill(watch_id=temp)
+                logger.error(f'视频获取错误。丢弃{watch_id}')
+
+                # await self.back_fill(watch_id=temp)
+
+
+def run_similar_instance(instance: Similar, watch_id_set: str):
+    asyncio.run(instance.run(watch_id_set))
 
 
 if __name__ == '__main__':
     start = time.time()
-    asyncio.run(Similar(max_page=0).run(watch_id_set="赚钱"))
-    print(time.time() - start)
+    watch_id_set = "赚钱"
+    max_page = 0
+
+    # 创建 Similar 实例列表
+    similar_instances = [Similar(max_page=max_page) for _ in range(5)]  # 假设创建5个实例
+
+    # 使用 ThreadPoolExecutor 进行多线程处理
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(run_similar_instance, instance, watch_id_set) for instance in similar_instances]
+
+    for future in as_completed(futures):
+        try:
+            future.result()  # 获取线程结果，触发异常处理
+        except Exception as e:
+            logger.error(f"线程执行出错: {e}")
+    print(f"总执行时间: {time.time() - start} 秒")

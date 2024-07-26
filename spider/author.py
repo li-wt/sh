@@ -1,8 +1,9 @@
 import asyncio
 import json
 import re
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import requests
 from fake_useragent import UserAgent
 from jsonpath_ng.ext import parse
 from loguru import logger
@@ -15,7 +16,7 @@ from db.redis_db import RedisDb
 class Author:
     def __init__(self):
         """
-        :param author_url: 类似博主的名称 例如：/@xxx
+        author_url: 类似博主的名称 例如：/@xxx
         """
         self.flag = False
         self.source = None
@@ -26,11 +27,12 @@ class Author:
         self.ua = UserAgent()
         self.base_url = "https://www.youtube.com"
 
-    async def get_proxy(self):
-        return {
-            'http': "http://127.0.0.1:7890",
-            'https': "https://127.0.0.1:7890"
-        }
+    # @
+    # async def get_proxy(self):
+    #     return {
+    #         'http': "http://127.0.0.1:7890",
+    #         'https': "https://127.0.0.1:7890"
+    #     }
 
     async def get_headers(self):
         headers = {
@@ -44,24 +46,24 @@ class Author:
         }
         return headers
 
-    async def next_similar(self, token: str, author_id: str):
-        url = "https://www.youtube.com/youtubei/v1/browse"
-        payload = json.dumps({
-            "context": {
-                "client": {
-                    "hl": "zh-CN",
-                    "clientName": "WEB",
-                    "clientVersion": "2.20240724.00.00",
-                },
-            },
-            "continuation": token
-        })
-        response = requests.request("POST", url, headers=await self.get_headers(), data=payload,
-                                    proxies=await self.get_proxy())
-        if response.status_code == 200:
-            await self.parse(json.loads(response), author_id)
-        print(response.text)
-        logger.info(f'状态码{response.status_code}')
+    # async def next_similar(self, token: str, author_id: str):
+    #     url = "https://www.youtube.com/youtubei/v1/browse"
+    #     payload = json.dumps({
+    #         "context": {
+    #             "client": {
+    #                 "hl": "zh-CN",
+    #                 "clientName": "WEB",
+    #                 "clientVersion": "2.20240724.00.00",
+    #             },
+    #         },
+    #         "continuation": token
+    #     })
+    #     response = requests.request("POST", url, headers=await self.get_headers(), data=payload,
+    #                                 proxies=await self.get_proxy())
+    #     if response.status_code == 200:
+    #         await self.parse(json.loads(response), author_id)
+    #     print(response.text)
+    #     logger.info(f'状态码{response.status_code}')
 
     async def save_watch_id(self, data: list):
         sql = 'insert into watch(watch) values (%s)'
@@ -83,6 +85,12 @@ class Author:
                 data = json.loads(data[0])
         else:
             data = response
+        # dyz = re.findall('分(\d.+?)位订阅者',
+        #                  "分".join([item.value for item in parse('$..metadataParts[*].text.content').find(data)]))
+        # if not dyz or eval(dyz[0].replace('万', ' * 10000')) < 10000:
+        #     logger.info(f"订阅者数量少于一万,{eval(dyz[0].replace('万', ' * 10000'))}")
+        #     return
+
         item = \
             parse("$.contents.twoColumnBrowseResultsRenderer.tabs[?(@.tabRenderer.title == '视频')].tabRenderer").find(
                 data)[
@@ -104,17 +112,18 @@ class Author:
 
         # await self.save_watch_id(watch_list)
         await self.save_title(name=author_id, data={"title": title_list})
-        if self.flag:
-            return
+        # if self.flag:
+        #     return
         # 获取下一页的token
-        continue_data = contents[-1]
-        token = parse('$..continuationItemRenderer.continuationEndpoint.continuationCommand.token').find(continue_data)[
-            0].value
+        # continue_data = contents[-1]
+        # token = parse('$..continuationItemRenderer.continuationEndpoint.continuationCommand.token')
+        # .find(continue_data)[
+        #     0].value
         # 第一页的数量就能达到20 下一页逻辑不在处理，下一页需要重新写解析函数，和第一页的结构不太一样
-        if not token:
-            logger.info('没有下一页')
-            return
-        await self.next_similar(token=token, author_id=author_id)
+        # if not token:
+        #     logger.info('没有下一页')
+        #     return
+        # await self.next_similar(token=token, author_id=author_id)
 
     async def back_fill(self, author_id: str) -> None:
         logger.error(f'请求失败:-----> author_id:{author_id},执行回填')
@@ -141,22 +150,45 @@ class Author:
 
         while True:
             temp = await self.redis_db.rpop('author_id')
-            if not temp:
+            if temp is None:
                 logger.info('没有author_id，休息中')
-                await asyncio.sleep(60)
+                await asyncio.sleep(3)
             try:
                 temp_json = json.loads(temp)
             except Exception as e:
                 logger.error(f"数据格式不是json格式，数据丢弃{temp}")
                 continue
             author_id, self.source = temp_json['name'], temp_json['source']
+            urllib.parse.unquote(author_id)
             try:
                 logger.info(f'开始获取{author_id}用户')
                 await self.get_author_info(author_id=author_id)
             except Exception as e:
-                await self.back_fill(author_id=author_id)
+                logger.error('用户没有视频，不存储')
+                continue
+                # await self.back_fill(author_id=author_id)
 
 
 if __name__ == '__main__':
     asyncio.run(Author().run())
     # Author().get_author_info(author_id='/@dailylofiradio')
+
+
+def run_author_instance(instance: Author):
+    asyncio.run(instance.run())
+
+
+if __name__ == '__main__':
+
+    # 创建 Similar 实例列表
+    similar_instances = [Author() for _ in range(5)]  # 假设创建5个实例
+
+    # 使用 ThreadPoolExecutor 进行多线程处理
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(run_author_instance, instance) for instance in similar_instances]
+
+    for future in as_completed(futures):
+        try:
+            future.result()  # 获取线程结果，触发异常处理
+        except Exception as e:
+            logger.error(f"线程执行出错: {e}")

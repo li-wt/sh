@@ -55,7 +55,7 @@ if __name__ == '__main__':
         redis_db = RedisDb()
         await redis_db.init()
         
-        await redis_db.lpush("watch_id", json.dumps({'name': '8_aG6r_hR14', 'source': "test"}))
+        await redis_db.lpush("赚钱", json.dumps({'name': '4zXTyc2ZjXM', 'source': "赚钱"}))
         await redis_db.close()
     
     

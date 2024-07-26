@@ -72,7 +72,7 @@ class AsyncHttpClient:
             async with self.session.get(url, headers=headers, proxy=proxy, **kwargs) as response:
                 if response.status == 200:
                     text = await response.text()
-                    text = codecs.decode(text, 'unicode_escape')
+                    # text = codecs.decode(text, 'unicode_escape')
                     return text
                 else:
                     logger.error(f"Failed to fetch URL: {url}, Status Code: {response.status}")
