@@ -1,4 +1,6 @@
 import asyncio
+import codecs
+import html
 
 import aiofiles
 import aiohttp
@@ -54,14 +56,23 @@ class AsyncHttpClient:
         if self.session:
             await self.session.close()
             logger.info("HTTP client session closed")
-
-    async def get(self, url, headers=None, **kwargs) -> str:
+            
+    @staticmethod
+    async def unescape(text: str):
+        previous_text = ''
+        while text != previous_text:
+            previous_text = text
+            text = html.unescape(text)
+        return previous_text
+    
+    async def get(self, url, headers=None, **kwargs) -> str or None:
         try:
             proxies = await get_proxy()
             proxy = proxies.get('http') if url.startswith('http://') else proxies.get('https')
             async with self.session.get(url, headers=headers, proxy=proxy, **kwargs) as response:
                 if response.status == 200:
                     text = await response.text()
+                    text = codecs.decode(text, 'unicode_escape')
                     return text
                 else:
                     logger.error(f"Failed to fetch URL: {url}, Status Code: {response.status}")

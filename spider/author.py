@@ -18,6 +18,7 @@ class Author:
         :param author_url: 类似博主的名称 例如：/@xxx
         """
         self.flag = False
+        self.source = None
         self.client = tools.AsyncHttpClient()
         self.mysql_db = AsyncMySQLManager()
         self.redis_db = RedisDb()
@@ -70,8 +71,8 @@ class Author:
 
     async def save_title(self, name: str, data: dict):
         """这里数据存储只能正确，错误逻辑怎么实现，未写代码。逻辑，存储三次，如果失败将用户名从mysql删除，添加到redis中即可"""
-        sql = 'insert into title(name, `title`) values (%s, %s)'
-        if await self.mysql_db.insert_url(sql=sql, data=[name, json.dumps(data, ensure_ascii=False)]):
+        sql = 'insert into title(name, `title`, source) values (%s, %s, %s)'
+        if await self.mysql_db.insert_url(sql=sql, data=[name, json.dumps(data, ensure_ascii=False), self.source]):
             logger.info(f'存储成功，{name}')
 
     async def parse(self, response: str or dict, author_id: str):
@@ -101,7 +102,7 @@ class Author:
             title_list.append(title)
             num += 1
 
-        await self.save_watch_id(watch_list)
+        # await self.save_watch_id(watch_list)
         await self.save_title(name=author_id, data={"title": title_list})
         if self.flag:
             return
@@ -139,10 +140,16 @@ class Author:
         await self.client.init()
 
         while True:
-            author_id = await self.redis_db.rpop('author_id')
-            if not author_id:
+            temp = await self.redis_db.rpop('author_id')
+            if not temp:
                 logger.info('没有author_id，休息中')
                 await asyncio.sleep(60)
+            try:
+                temp_json = json.loads(temp)
+            except Exception as e:
+                logger.error(f"数据格式不是json格式，数据丢弃{temp}")
+                continue
+            author_id, self.source = temp_json['name'], temp_json['source']
             try:
                 logger.info(f'开始获取{author_id}用户')
                 await self.get_author_info(author_id=author_id)
