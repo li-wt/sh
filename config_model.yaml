@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 mysql:
   host: "127.0.0.1"
   port : 3306
@@ -13,20 +12,4 @@ redis:
   password: "xxxx"
 
 watch_id : "watch_id"
-=======
-mysql:
-  host: "127.0.0.1"
-  port : 3306
-  user: "xxxx"
-  password: "xxxx"
-  db: 'test'
-
-redis:
-  host: '127.0.0.1'
-  port: 6379
-  db: '2'
-  password: "xxxx"
-
-watch_id : "watch_id"
->>>>>>> 7dafe47703dcf867d831075648de32c71ea6ebcf
 author_id: "author_id"
