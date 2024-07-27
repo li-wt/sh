@@ -62,7 +62,7 @@ class Similar:
                 return
             self.page += 1
             if self.page - self.max_page != 0:
-                logger.info(f"正在解析 {self.page} 页")
+                # logger.info(f"正在解析 {self.page} 页")
                 data = await self.next_similar(token)
                 token = await self.parse(data, type=1)
             else:
@@ -91,7 +91,7 @@ class Similar:
             data = await self.redis_db.sadd(key=self.source + "-w", value=value)
             if data:
                 await self.redis_db.lpush(key=self.watch_id_set, value=value)
-                logger.info(f'已存储watch_id:{name}')
+                # logger.info(f'已存储watch_id:{name}')
 
         if type == 'author':
             # 用户
@@ -204,10 +204,10 @@ if __name__ == '__main__':
     max_page = 0
 
     # 创建 Similar 实例列表
-    similar_instances = [Similar(max_page=max_page) for _ in range(5)]  # 假设创建5个实例
+    similar_instances = [Similar(max_page=max_page) for _ in range(10)]  # 假设创建5个实例
 
     # 使用 ThreadPoolExecutor 进行多线程处理
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(run_similar_instance, instance, watch_id_set) for instance in similar_instances]
 
     for future in as_completed(futures):
